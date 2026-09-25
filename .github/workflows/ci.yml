@@ -38,7 +38,9 @@ jobs:
           npm i -g playwright@1.56.0
           npx -y playwright@1.56.0 install --with-deps chromium
           mkdir -p /tmp/pgrst
-          curl -sSL https://github.com/PostgREST/postgrest/releases/download/v12.2.3/postgrest-v12.2.3-linux-static-x64.tar.xz | tar -xJ -C /tmp/pgrst
+          curl -sSL -o /tmp/pgrst.tar.xz https://github.com/PostgREST/postgrest/releases/download/v12.2.3/postgrest-v12.2.3-linux-static-x64.tar.xz
+          echo "9f71269e61ac3a940281e93ff415760f5957e430e475ba4c3889f3ede7d5527c  /tmp/pgrst.tar.xz" | sha256sum -c -
+          tar -xJf /tmp/pgrst.tar.xz -C /tmp/pgrst
       - name: board with mock auth (2 viewports, 2 browser languages)
         env:
           PGADMIN: postgresql://postgres:postgres@127.0.0.1:5432
@@ -59,7 +61,7 @@ jobs:
           node-version: 22
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.118.0   # مثبّت: نفس النسخة في release وbackup (مقيسة محليًا 25/09/2026)
       - name: tools
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
