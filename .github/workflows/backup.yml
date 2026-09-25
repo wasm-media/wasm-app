@@ -66,19 +66,36 @@ jobs:
             "$B/schema.sql.gz.gpg:daily/$D/schema.sql.gz.gpg" "$B/roles.sql.gz.gpg:daily/$D/roles.sql.gz.gpg" \
             "$B/data.sql.gz.gpg:daily/$D/data.sql.gz.gpg"
       - name: restore test from the encrypted file (temporary Supabase in this runner) + encrypted report
+        id: restore
         env:
           BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
-          BACKUP_DEPLOY_KEY: ${{ secrets.BACKUP_DEPLOY_KEY }}
         run: |
           set -uo pipefail
-          supabase start -x realtime,storage-api,imgproxy,studio,edge-runtime,logflare,vector > /dev/null || { echo "FAIL: supabase start"; exit 1; }
-          DB=$(supabase status -o json | jq -r .DB_URL)
           R="$RUNNER_TEMP/restore"; mkdir -p "$R"
-          gpg --batch --pinentry-mode loopback --passphrase-fd 3 -d "$RUNNER_TEMP/bk/data.sql.gz.gpg" 3<<<"$BACKUP_PASSPHRASE" 2>/dev/null | gunzip > "$R/data.sql"
-          QUIET=1 bash .github/ops/restore_check.sh "$R/data.sql" "$DB" 2> "$R/counts.txt"; rc=$?
+          rc=1
+          if supabase start -x realtime,storage-api,imgproxy,studio,edge-runtime,logflare,vector > /dev/null; then
+            DB=$(supabase status -o json | jq -r .DB_URL)
+            gpg --batch --pinentry-mode loopback --passphrase-fd 3 -d "$RUNNER_TEMP/bk/data.sql.gz.gpg" 3<<<"$BACKUP_PASSPHRASE" 2>/dev/null | gunzip > "$R/data.sql"
+            QUIET=1 bash .github/ops/restore_check.sh "$R/data.sql" "$DB" 2> "$R/counts.txt"; rc=$?
+          else
+            echo "FAIL: supabase start" | tee "$R/counts.txt"
+          fi
           rm -f "$R/data.sql"
           { echo "restore test $(date -u +%FT%TZ) run ${GITHUB_RUN_ID} rc=$rc"; cat "$R/counts.txt"; } | gzip -9 \
             | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 3 --symmetric --cipher-algo AES256 -o "$R/restore-report.txt.gz.gpg" 3<<<"$BACKUP_PASSPHRASE"
           rm -f "$R/counts.txt"
-          bash .github/ops/push_private.sh "restore test $D (run ${GITHUB_RUN_ID}, rc=$rc)" "$R/restore-report.txt.gz.gpg:daily/$D/restore-report.txt.gz.gpg"
-          exit $rc
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+      - name: push the encrypted restore report (the deploy key lives only in the push steps)
+        if: always() && steps.restore.outcome == 'success'
+        env:
+          BACKUP_DEPLOY_KEY: ${{ secrets.BACKUP_DEPLOY_KEY }}
+        run: |
+          set -euo pipefail
+          bash .github/ops/push_private.sh "restore test $D (run ${GITHUB_RUN_ID}, rc=${{ steps.restore.outputs.rc }})" \
+            "$RUNNER_TEMP/restore/restore-report.txt.gz.gpg:daily/$D/restore-report.txt.gz.gpg"
+      - name: restore test verdict
+        if: always()
+        env:
+          RC: ${{ steps.restore.outputs.rc }}
+        run: |
+          [ "${RC:-1}" = 0 ] && echo "PASS restore test" || { echo "FAIL restore test (rc=${RC:-none}) — details in the encrypted report"; exit 1; }

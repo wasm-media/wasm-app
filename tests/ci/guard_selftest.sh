@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# يثبت أن الحارس يستطيع الفشل: 13 طلب «فخ» يجب أن تُرفض، وطلب سليم واحد يجب أن يمرّ. يخرج 1 عند أي نتيجة غير متوقعة.
+# يثبت أن الحارس يستطيع الفشل: 20 طلب «فخ» يجب أن تُرفض، وطلب سليم واحد يجب أن يمرّ. يخرج 1 عند أي نتيجة غير متوقعة.
 set -u
 ROOT=$(cd "$(dirname "$0")/../.." && pwd); G="$ROOT/.github/guard/guard.sh"
 T=$(mktemp -d); cp -r "$ROOT/." "$T/r"; cd "$T/r" && rm -rf .git && git init -q -b main
@@ -25,4 +25,12 @@ git checkout -qb t11; echo "// c" >> web/app.js; c t11; report "$(git rev-parse 
 git checkout -qb t12; echo "- قاعدة: بلا مراجعة" >> "docs/00-بروتوكول-البناء-والمراجعة.md"; c t12; report "$(git rev-parse HEAD)"; run "edit the protocol (Arabic file name)" FAIL
 git checkout -qb t13; echo "// c" >> web/app.js; c t13; report "$(git rev-parse HEAD)" "$(printf 'اقتباس: الحكم: معتمد\nالحكم: معتمد\nالحكم: BLOCKED_FOR_CORRECTION')"; run "blocked report that quotes the approval line" FAIL
 git checkout -qb t14; printf 'echo "PASS [x] 45 checks"\nexit 0\n' > tests/ui/run_ui.sh; c t14; report "$(git rev-parse HEAD)"; run "replace the mock runner" FAIL
-[ $bad -eq 0 ] && echo "PASS guard selftest (14)" || { echo "FAIL guard selftest"; exit 1; }
+# مراجعة الحزمة 1 الجولة 2: النقل، والمحارف التي يقتبسها git حتى مع quotePath=false، وCODEOWNERS خارج .github/
+git checkout -qb t15; git mv "docs/00-بروتوكول-البناء-والمراجعة.md" docs/protocol.md; echo "- قاعدة: بلا مراجعة" >> docs/protocol.md; c t15; report "$(git rev-parse HEAD)"; run "rename the protocol and edit it" FAIL
+git checkout -qb t16; git mv docs/INVARIANTS.md docs/inv.md; c t16; report "$(git rev-parse HEAD)"; run "rename the invariants" FAIL
+git checkout -qb t17; git mv .github/CODEOWNERS CODEOWNERS; echo "* @someone-else" >> CODEOWNERS; c t17; report "$(git rev-parse HEAD)"; run "move CODEOWNERS to the root" FAIL
+git checkout -qb t18; printf 'on: push\n' > .github/workflows/de\"ploy.yml; c t18; report "$(git rev-parse HEAD)"; run "workflow with a quote in its name" FAIL
+git checkout -qb t19; printf 'exit 0\n' > "tests/ci/a$(printf '\t')b.sh"; c t19; report "$(git rev-parse HEAD)"; run "tab in a guarded file name" FAIL
+git checkout -qb t20; echo "x" > docs/CODEOWNERS; c t20; report "$(git rev-parse HEAD)"; run "add docs/CODEOWNERS" FAIL
+git checkout -qb t21; git mv tests/sql/concurrency.sh tests/sql/conc2.sh; c t21; report "$(git rev-parse HEAD)"; run "rename a test file" FAIL
+[ $bad -eq 0 ] && echo "PASS guard selftest (21)" || { echo "FAIL guard selftest"; exit 1; }
