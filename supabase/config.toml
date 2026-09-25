@@ -12,5 +12,7 @@ enable_refresh_token_rotation = true   # P19: تدوير رموز التجديد
 refresh_token_reuse_interval = 10
 
 [auth.email]
-enable_signup = false
+# true = مزوّد البريد نفسه يعمل (الدخول بكلمة السر). false هنا يُطفئ الدخول كله (email_provider_disabled، مقيس)،
+# وإغلاق التسجيل الذاتي يأتي من [auth] enable_signup = false أعلاه.
+enable_signup = true
 enable_confirmations = false

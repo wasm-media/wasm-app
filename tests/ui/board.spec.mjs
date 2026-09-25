@@ -190,9 +190,10 @@ try {
     ok(live === 0, `I13 no live refresh token left for the partner after logout with an expired access token (live=${live})`);
     await page.evaluate(() => fetch('/__test/ttl?s=3600'));
   } else {
-    // P17: التسجيل الذاتي مغلق في Supabase Auth الحقيقي
-    const su = await page.evaluate(async ([auth, key]) => (await fetch(`${auth}/auth/v1/signup`, { method: 'POST', headers: { 'content-type': 'application/json', apikey: key }, body: JSON.stringify({ email: 'intruder@wasm.test', password: 'Intruder-pass-123' }) })).status, [AUTH, APIKEY]);
-    ok(su >= 400 && su < 500, `P17 self-signup rejected by real Supabase Auth (status ${su})`);
+    // P17: التسجيل الذاتي مغلق في Supabase Auth الحقيقي — بسببه هو (signup_disabled)، لا بأي 4xx آخر
+    // (مزوّد بريد مطفأ أو كلمة سر ضعيفة يرجعان 422 أيضًا، فيمرّ الفحص كاذبًا — N7)
+    const su = await page.evaluate(async ([auth, key]) => { const r = await fetch(`${auth}/auth/v1/signup`, { method: 'POST', headers: { 'content-type': 'application/json', apikey: key }, body: JSON.stringify({ email: 'intruder@wasm.test', password: 'Intruder-pass-123' }) }); let j = {}; try { j = await r.json(); } catch { /* ليس JSON */ } return { status: r.status, code: j.error_code || '' }; }, [AUTH, APIKEY]);
+    ok(su.status === 422 && su.code === 'signup_disabled', `P17 self-signup rejected by real Supabase Auth (status ${su.status}, ${su.code || 'no error_code'})`);
   }
   ok(await page.evaluate(() => localStorage.getItem('wasm.session')) === null, 'logout clears the stored session');
   await ctx.close();
