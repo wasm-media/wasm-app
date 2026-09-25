@@ -1,9 +1,12 @@
 name: guard
 # يعمل بنسخة main دائمًا (pull_request_target): الـPR لا يستطيع تعديل الحارس ولا تمرير نسخة منه.
 # لا يشغّل كود الـPR، ولا يحمل أي سر.
+# القاعدة = رأس main الحالي لحظة التشغيل، لا base.sha في الحدث (قد تكون قديمة فيمرّ PR يُرجع ملف حراسة —
+# مراجعة «حارس المسارات» ج2). ما يتقدّم به main بعد التشغيل يُغلقه إعداد «Require branches to be up to date».
 on:
   pull_request_target:
     types: [opened, synchronize, reopened]
+    branches: [main]
 permissions:
   contents: read
 jobs:
@@ -13,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: refs/heads/main
           fetch-depth: 0
           persist-credentials: false
       - name: fetch PR head as data only (exactly the event's commit, not whatever the PR points to now)
@@ -24,8 +27,11 @@ jobs:
           git fetch --no-tags origin "+refs/pull/${PR}/head:refs/remotes/pr/head"
           git cat-file -e "${HEAD_SHA}^{commit}" 2>/dev/null || git fetch --no-tags origin "$HEAD_SHA"
           git cat-file -e "${HEAD_SHA}^{commit}" || { echo "::error::event head ${HEAD_SHA} not fetchable"; exit 1; }
-      - name: guard (main's copy)
+      - name: guard (current main's copy, against current main)
         env:
-          BASE: ${{ github.event.pull_request.base.sha }}
+          EVENT_BASE: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: bash .github/guard/guard.sh "$BASE" "$HEAD_SHA"
+        run: |
+          BASE=$(git rev-parse HEAD)
+          echo "base = current main ${BASE} (event base.sha ${EVENT_BASE})"
+          bash .github/guard/guard.sh "$BASE" "$HEAD_SHA"
