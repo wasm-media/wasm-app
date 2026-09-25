@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# يثبت أن الحارس يستطيع الفشل: 20 طلب «فخ» يجب أن تُرفض، وطلب سليم واحد يجب أن يمرّ. يخرج 1 عند أي نتيجة غير متوقعة.
+# يثبت أن الحارس يستطيع الفشل: 23 طلب «فخ» يجب أن تُرفض، وطلب سليم واحد يجب أن يمرّ. يخرج 1 عند أي نتيجة غير متوقعة.
 set -u
 ROOT=$(cd "$(dirname "$0")/../.." && pwd); G="$ROOT/.github/guard/guard.sh"
 T=$(mktemp -d); cp -r "$ROOT/." "$T/r"; cd "$T/r" && rm -rf .git && git init -q -b main
@@ -33,4 +33,16 @@ git checkout -qb t18; printf 'on: push\n' > .github/workflows/de\"ploy.yml; c t1
 git checkout -qb t19; printf 'exit 0\n' > "tests/ci/a$(printf '\t')b.sh"; c t19; report "$(git rev-parse HEAD)"; run "tab in a guarded file name" FAIL
 git checkout -qb t20; echo "x" > docs/CODEOWNERS; c t20; report "$(git rev-parse HEAD)"; run "add docs/CODEOWNERS" FAIL
 git checkout -qb t21; git mv tests/sql/concurrency.sh tests/sql/conc2.sh; c t21; report "$(git rev-parse HEAD)"; run "rename a test file" FAIL
-[ $bad -eq 0 ] && echo "PASS guard selftest (21)" || { echo "FAIL guard selftest"; exit 1; }
+git checkout -qb t22; rm tests/sql/concurrency.sh; ln -s ../ui/board.spec.mjs tests/sql/concurrency.sh; c t22; report "$(git rev-parse HEAD)"; run "test file turned into a symlink" FAIL
+# مراجعة «حارس المسارات» ج1: قواعد دمج متعددة (criss-cross) تخفي إرجاع ملف حراسة عن BASE...HEAD
+cc() { # $1=اسم، $2=الملف المحمي الذي يعدّله main ثم يُرجعه الـPR
+  git checkout -qb "$1-p1" "$BASE"; echo "//p1" >> web/app.js; git add -A; GIT_COMMITTER_DATE=2026-10-02T12:00:00Z git commit -qm p1; local P1; P1=$(git rev-parse HEAD)
+  git checkout -qb "$1-main" "$BASE"; echo "x-isa-rule" >> "$2"; git add -A; GIT_COMMITTER_DATE=2026-10-02T10:00:00Z git commit -qm isa; local M1; M1=$(git rev-parse HEAD)
+  GIT_COMMITTER_DATE=2026-10-02T13:00:00Z git merge -q --no-ff "$P1" -m "merge p1"; local M2; M2=$(git rev-parse HEAD)
+  git checkout -qb "$1-atk" "$P1"; git merge -q --no-ff --no-commit "$M1" >/dev/null 2>&1; git checkout "$P1" -- "$2"; git commit -qm "merge main"
+  echo "//x" >> web/app.js; c code; report "$(git rev-parse HEAD)"
+  bash "$G" "$M2" "$(git rev-parse HEAD)" >/dev/null 2>&1; local rc=$?; local got; got=$([ $rc -eq 0 ] && echo PASS || echo FAIL)
+  if [ "$got" = FAIL ]; then echo "ok   $3 → FAIL"; else echo "BAD  $3 → PASS (want FAIL)"; bad=1; fi; git checkout -q main; }
+cc t23 .github/guard/guard.sh "criss-cross merge reverts a guard file"
+cc t24 tests/COUNT "criss-cross merge lowers the test count"
+[ $bad -eq 0 ] && echo "PASS guard selftest (24)" || { echo "FAIL guard selftest"; exit 1; }

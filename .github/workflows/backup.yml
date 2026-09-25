@@ -70,7 +70,8 @@ jobs:
         env:
           BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
         run: |
-          set -uo pipefail
+          # GitHub يشغّل الخطوة بـbash -e: نطفئه هنا ليُكتب التقرير المشفّر ويُمسح الملف المفكوك حتى عند الفشل
+          set +e; set -uo pipefail
           R="$RUNNER_TEMP/restore"; mkdir -p "$R"
           rc=1
           if supabase start -x realtime,storage-api,imgproxy,studio,edge-runtime,logflare,vector > /dev/null; then

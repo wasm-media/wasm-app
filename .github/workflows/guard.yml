@@ -16,11 +16,16 @@ jobs:
           ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - name: fetch PR head as data only
+      - name: fetch PR head as data only (exactly the event's commit, not whatever the PR points to now)
         env:
           PR: ${{ github.event.pull_request.number }}
-        run: git fetch --no-tags origin "+refs/pull/${PR}/head:refs/remotes/pr/head"
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git fetch --no-tags origin "+refs/pull/${PR}/head:refs/remotes/pr/head"
+          git cat-file -e "${HEAD_SHA}^{commit}" 2>/dev/null || git fetch --no-tags origin "$HEAD_SHA"
+          git cat-file -e "${HEAD_SHA}^{commit}" || { echo "::error::event head ${HEAD_SHA} not fetchable"; exit 1; }
       - name: guard (main's copy)
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
-        run: bash .github/guard/guard.sh "$BASE" "$(git rev-parse refs/remotes/pr/head)"
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bash .github/guard/guard.sh "$BASE" "$HEAD_SHA"

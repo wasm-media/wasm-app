@@ -14,7 +14,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: the guard must reject 20 trap PRs and pass 1 clean PR
+      - name: the guard must reject 23 trap PRs and pass 1 clean PR
         run: bash tests/ci/guard_selftest.sh
   ui-mock:
     runs-on: ubuntu-latest
