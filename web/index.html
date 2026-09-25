@@ -35,6 +35,17 @@
       </form>
     </section>
 
+    <!-- تعيين كلمة السر من رابط الدعوة (P18) -->
+    <section class="login" data-testid="setpw-view" id="setpw-view" hidden>
+      <form class="login-card" id="setpw-form" novalidate>
+        <h1>أهلًا بك — اختر كلمة السر</h1>
+        <label>كلمة السر الجديدة<input data-testid="setpw-password" id="setpw-password" type="password" autocomplete="new-password" dir="ltr" required minlength="8"></label>
+        <label>أعد كتابتها<input data-testid="setpw-confirm" id="setpw-confirm" type="password" autocomplete="new-password" dir="ltr" required minlength="8"></label>
+        <p class="form-msg" data-testid="setpw-msg" id="setpw-msg" hidden></p>
+        <button class="btn-primary" data-testid="setpw-submit" type="submit">حفظ والدخول</button>
+      </form>
+    </section>
+
     <!-- لا صلاحية -->
     <section class="empty-state" data-testid="no-access" id="no-access" hidden>
       <h1>لا توجد لك صلاحية على لوحة الشغلات</h1>

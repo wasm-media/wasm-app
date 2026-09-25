@@ -26,6 +26,10 @@ const ERRORS = {
   invalid_login: 'البريد أو كلمة المرور غير صحيحة.',
   network: 'تعذّر الاتصال بالخادم. تأكد من الإنترنت وأعد المحاولة.',
   bad_date: 'اكتب التاريخ بصيغة يوم/شهر/سنة، مثل 05/10/2026.',
+  invite_invalid: 'رابط الدعوة منتهي أو استُعمل من قبل. اطلب رابطًا جديدًا.',
+  password_short: 'كلمة السر 8 أحرف على الأقل.',
+  password_mismatch: 'كلمتا السر غير متطابقتين.',
+  weak_password: 'كلمة السر ضعيفة. اختر كلمة أطول وأصعب.',
   logout_failed: 'تعذّر تسجيل الخروج من الخادم، فالجلسة ما زالت فعّالة. تأكد من الاتصال واضغط «خروج» مرة أخرى.',
 };
 
@@ -122,8 +126,8 @@ function showError(err) {
 
 // ===== العرض =====
 function show(view) {
-  for (const id of ['login-view', 'no-access', 'board-view']) if ($(id)) $(id).hidden = id !== view;
-  $('who').hidden = view === 'login-view';
+  for (const id of ['login-view', 'setpw-view', 'no-access', 'board-view']) if ($(id)) $(id).hidden = id !== view;
+  $('who').hidden = view === 'login-view' || view === 'setpw-view';
 }
 
 let jobs = [];
@@ -306,4 +310,49 @@ $('logout').addEventListener('click', () => guarded(async () => {
 }));
 for (const b of document.querySelectorAll('[data-close]')) b.addEventListener('click', () => b.closest('dialog').close());
 
-if (session) enter(); else show('login-view');
+// ===== رابط الدعوة ← تعيين كلمة السر (P18) =====
+// Supabase يعيد المدعو إلى هنا بـ #access_token=…&refresh_token=…&expires_in=…&type=invite (أو type=recovery)،
+// أو بـ #error=…&error_code=otp_expired… إن كان الرابط منتهيًا أو مستعملًا. الرمز يُمسح من شريط العنوان فورًا،
+// ولا يُخزَّن شيء قبل أن يقبل الخادم كلمة السر.
+let invite = null;
+{
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (h.get('error') || h.get('error_code')) invite = { error: true };
+  else if (h.get('access_token') && ['invite', 'recovery'].includes(h.get('type'))) {
+    invite = { access_token: h.get('access_token'), refresh_token: h.get('refresh_token'), expires_in: Number(h.get('expires_in')) || 3600 };
+  }
+  if (invite) history.replaceState(null, '', location.pathname + location.search);
+}
+function setpwMsg(code) { const m = $('setpw-msg'); m.textContent = ERRORS[code]; m.hidden = false; }
+$('setpw-form').addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  const pw = $('setpw-password').value;
+  if (pw.length < 8) return setpwMsg('password_short');
+  if (pw !== $('setpw-confirm').value) return setpwMsg('password_mismatch');
+  $('setpw-msg').hidden = true;
+  guarded(async () => {
+    let r;
+    try {
+      r = await fetch(`${BASE}/auth/v1/user`, {
+        method: 'PUT',
+        headers: { apikey: CFG.anonKey || '', authorization: `Bearer ${invite.access_token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ password: pw }),
+      });
+    } catch { throw new AppError('network'); }
+    if (r.status === 401 || r.status === 403) { invite = null; show('login-view'); throw new AppError('invite_invalid'); }
+    if (r.status === 400 || r.status === 422) { setpwMsg('weak_password'); return; }
+    if (!r.ok) throw new AppError('network');
+    const u = await r.json();
+    saveSession({ access_token: invite.access_token, refresh_token: invite.refresh_token, expires_at: Date.now() + (invite.expires_in - 60) * 1000, uid: u.id });
+    invite = null;
+    $('setpw-password').value = ''; $('setpw-confirm').value = '';
+    await enter();
+  });
+});
+
+// جلسة سابقة على الجهاز لا تُمسح محليًا هنا (مسحها بلا إبطال في الخادم يخالف روح I13)؛ تُستبدل فقط عند نجاح تعيين كلمة السر
+if (invite?.access_token) show('setpw-view');
+else {
+  if (invite?.error) showError(new AppError('invite_invalid'));
+  if (session) enter(); else show('login-view');
+}
