@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>وسم ميديا — لوحة الشغلات</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="config.js"></script>
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-name">وسم ميديا</span>
+      <span class="brand-sep" aria-hidden="true"></span>
+      <span class="brand-page">لوحة الشغلات</span>
+    </div>
+    <div class="who" id="who" hidden>
+      <span id="who-name"></span>
+      <button class="btn-ghost" id="logout" type="button">خروج</button>
+    </div>
+  </header>
+
+  <div class="toast" data-testid="error" id="error" role="alert" hidden></div>
+
+  <main id="main">
+    <!-- الدخول -->
+    <section class="login" id="login-view" hidden>
+      <form class="login-card" id="login-form">
+        <h1>تسجيل الدخول</h1>
+        <label>البريد الإلكتروني<input data-testid="login-email" id="login-email" type="email" autocomplete="username" dir="ltr" required></label>
+        <label>كلمة المرور<input data-testid="login-password" id="login-password" type="password" autocomplete="current-password" dir="ltr" required></label>
+        <button class="btn-primary" data-testid="login-submit" type="submit">دخول</button>
+      </form>
+    </section>
+
+    <!-- لا صلاحية -->
+    <section class="empty-state" data-testid="no-access" id="no-access" hidden>
+      <h1>لا توجد لك صلاحية على لوحة الشغلات</h1>
+      <p>اللوحة للشريكين فقط. مهامك ستظهر لك في قسم المهام عند إطلاقه.</p>
+    </section>
+
+    <!-- اللوحة: لا تدخل الصفحة إلا بعد أن يؤكد السيرفر أن المستخدم شريك -->
+    <template id="board-tpl">
+    <section id="board-view">
+      <div class="board-bar">
+        <h1 class="board-title">الشغلات <span class="count" id="open-count"></span></h1>
+        <button class="btn-primary" data-testid="new-job" id="new-job" type="button">شغلة جديدة</button>
+      </div>
+      <div class="board-scroller">
+        <div class="board" data-testid="board" id="board"></div>
+      </div>
+      <details class="cancelled" open>
+        <summary>الملغاة <span class="count" id="cancelled-count"></span></summary>
+        <div class="cancelled-list" data-testid="cancelled-list" id="cancelled-list"></div>
+      </details>
+    </section>
+    </template>
+  </main>
+
+  <!-- شغلة جديدة -->
+  <dialog class="sheet" id="new-job-dialog">
+    <form id="new-job-form" method="dialog">
+      <h2>شغلة جديدة</h2>
+      <label>العميل<input data-testid="nj-client" name="client" required maxlength="200"></label>
+      <label>عنوان الشغلة<input data-testid="nj-title" name="title" required maxlength="200"></label>
+      <div class="row">
+        <label>النوع
+          <select data-testid="nj-type" name="type" required>
+            <option value="design">تصميم</option>
+            <option value="print">طباعة</option>
+            <option value="video">فيديو</option>
+            <option value="event">فعالية</option>
+            <option value="other">أخرى</option>
+          </select>
+        </label>
+        <label>تاريخ التسليم (يوم/شهر/سنة)<input data-testid="nj-due" name="due" inputmode="numeric" dir="ltr" placeholder="05/10/2026" maxlength="10" autocomplete="off"></label>
+      </div>
+      <label>ملاحظات (للشريكين فقط)<textarea data-testid="nj-notes" name="notes" rows="3" maxlength="2000"></textarea></label>
+      <p class="form-msg" data-testid="nj-msg" id="nj-msg" hidden></p>
+      <div class="actions">
+        <button class="btn-ghost" type="button" data-close>إلغاء</button>
+        <button class="btn-primary" data-testid="nj-submit" type="submit">فتح الشغلة</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- الإلغاء -->
+  <dialog class="sheet" id="cancel-dialog">
+    <form id="cancel-form" method="dialog">
+      <h2>إلغاء الشغلة <span id="cancel-num"></span></h2>
+      <p class="hint">الإلغاء نهائي. إن رجع العميل تُفتح شغلة جديدة برقم جديد.</p>
+      <label>سبب الإلغاء<textarea data-testid="cancel-reason" id="cancel-reason" rows="3" maxlength="500"></textarea></label>
+      <p class="form-msg" id="cancel-msg" hidden></p>
+      <div class="actions">
+        <button class="btn-ghost" type="button" data-close>تراجع</button>
+        <button class="btn-danger" data-testid="cancel-confirm" type="submit">تأكيد الإلغاء</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- السجل -->
+  <dialog class="drawer" id="log-dialog" data-testid="log-panel">
+    <div class="drawer-head">
+      <h2>سجل الشغلة <span id="log-num"></span></h2>
+      <button class="btn-ghost" data-testid="log-close" type="button" data-close>إغلاق</button>
+    </div>
+    <div class="log-meta" id="log-meta"></div>
+    <ol class="log" id="log-list"></ol>
+  </dialog>
+</body>
+</html>

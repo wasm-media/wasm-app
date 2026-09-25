@@ -1,0 +1,26 @@
+name: guard
+# يعمل بنسخة main دائمًا (pull_request_target): الـPR لا يستطيع تعديل الحارس ولا تمرير نسخة منه.
+# لا يشغّل كود الـPR، ولا يحمل أي سر.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+permissions:
+  contents: read
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: fetch PR head as data only
+        env:
+          PR: ${{ github.event.pull_request.number }}
+        run: git fetch --no-tags origin "+refs/pull/${PR}/head:refs/remotes/pr/head"
+      - name: guard (main's copy)
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: bash .github/guard/guard.sh "$BASE" "$(git rev-parse refs/remotes/pr/head)"
