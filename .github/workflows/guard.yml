@@ -5,7 +5,7 @@ name: guard
 # مراجعة «حارس المسارات» ج2). ما يتقدّم به main بعد التشغيل يُغلقه إعداد «Require branches to be up to date».
 on:
   pull_request_target:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, edited]   # edited: تغيير قاعدة الـPR إلى main يشغّل الحارس
     branches: [main]
 permissions:
   contents: read
