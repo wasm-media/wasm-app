@@ -14,6 +14,14 @@ code=$(curl -s -o "$T/users.json" -w '%{http_code}' "$SUPABASE_URL/auth/v1/admin
   echo "- افتحه على جهاز صاحبه، واكتب كلمة السر مرتين، فتفتح اللوحة."; echo; } > "$OUT"
 n=0; i=0
 IFS=',' read -ra EM <<< "${PARTNER_EMAILS:-}"
+# قبل أي رابط: كل بريد يجب أن تكون بصمته في ترحيل مدموج (صف partner_seed)، وإلا يُنشأ حساب بلا دور
+# لا يُصلحه الـtrigger لاحقًا (يعمل عند الإنشاء فقط) — مراجعة الحزمة 1، BACKLOG 1
+MIG=${MIGRATIONS_DIR:-supabase/migrations}; k=0
+for raw in "${EM[@]}"; do
+  e=$(printf '%s' "$raw" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]'); [ -n "$e" ] || continue; k=$((k+1))
+  h=$(printf '%s' "$e" | sha256sum | cut -d' ' -f1)
+  grep -rqF "'$h'" "$MIG" || { echo "FAIL: email #$k has no seed fingerprint in $MIG — no links generated"; exit 1; }
+done
 for raw in "${EM[@]}"; do
   e=$(printf '%s' "$raw" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]'); [ -n "$e" ] || continue; i=$((i+1))
   exists=$(jq --arg e "$e" '[.users[] | select((.email // "" | ascii_downcase) == $e)] | length' "$T/users.json")

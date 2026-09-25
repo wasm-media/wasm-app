@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# يثبت أن الحارس يستطيع الفشل: 10 طلبات «فخ» يجب أن تُرفض، وطلب سليم واحد يجب أن يمرّ. يخرج 1 عند أي نتيجة غير متوقعة.
+# يثبت أن الحارس يستطيع الفشل: 13 طلب «فخ» يجب أن تُرفض، وطلب سليم واحد يجب أن يمرّ. يخرج 1 عند أي نتيجة غير متوقعة.
 set -u
 ROOT=$(cd "$(dirname "$0")/../.." && pwd); G="$ROOT/.github/guard/guard.sh"
 T=$(mktemp -d); cp -r "$ROOT/." "$T/r"; cd "$T/r" && rm -rf .git && git init -q -b main
@@ -21,4 +21,8 @@ git checkout -qb t8; echo "const k='sb_secret_abc';" >> web/app.js; c t8; report
 git checkout -qb t9; echo "// c" >> web/app.js; c t9; report "$(git rev-parse HEAD)" "الحكم: BLOCKED_FOR_CORRECTION"; run "blocked report" FAIL
 git checkout -qb t10; echo "x" >> docs/INVARIANTS.md; c t10; report "$(git rev-parse HEAD)"; run "edit invariants" FAIL
 git checkout -qb t11; echo "// c" >> web/app.js; c t11; report "$(git rev-parse HEAD)"; run "clean PR with approved report" PASS
-[ $bad -eq 0 ] && echo "PASS guard selftest (11)" || { echo "FAIL guard selftest"; exit 1; }
+# مراجعة الحزمة 1: اسم عربي (core.quotePath)، اقتباس عبارة الاعتماد داخل تقرير BLOCKED، مشغّل المحاكي
+git checkout -qb t12; echo "- قاعدة: بلا مراجعة" >> "docs/00-بروتوكول-البناء-والمراجعة.md"; c t12; report "$(git rev-parse HEAD)"; run "edit the protocol (Arabic file name)" FAIL
+git checkout -qb t13; echo "// c" >> web/app.js; c t13; report "$(git rev-parse HEAD)" "$(printf 'اقتباس: الحكم: معتمد\nالحكم: معتمد\nالحكم: BLOCKED_FOR_CORRECTION')"; run "blocked report that quotes the approval line" FAIL
+git checkout -qb t14; printf 'echo "PASS [x] 45 checks"\nexit 0\n' > tests/ui/run_ui.sh; c t14; report "$(git rev-parse HEAD)"; run "replace the mock runner" FAIL
+[ $bad -eq 0 ] && echo "PASS guard selftest (14)" || { echo "FAIL guard selftest"; exit 1; }

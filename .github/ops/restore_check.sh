@@ -2,7 +2,7 @@
 # الاستعادة التجريبية (P7، P13، D25): تحمّل نسخة البيانات في قاعدة Supabase مؤقتة داخل الـrunner
 # (مكدّس `supabase start` بالترحيلات نفسها)، ثم تطابق عدد الصفوف جدولًا جدولًا مع ما في النسخة.
 # لا يُطبع أي صف من البيانات. QUIET=1 (سجل الإنتاج العام): stdout = أسماء الجداول وحكمها بلا أعداد،
-# والأعداد تذهب إلى stderr ليُشفَّر تقريرها مع النسخة. يخرج 1 عند أي اختلاف.
+# والأعداد ورسائل أخطاء psql (قد تحوي قيمًا) تذهب إلى stderr ليُشفَّر تقريرها مع النسخة. يخرج 1 عند أي اختلاف.
 # الاستعمال: [QUIET=1] restore_check.sh <data.sql> <DB_URL>
 set -uo pipefail
 DUMP=$1; DB=$2
@@ -18,8 +18,8 @@ done
 # 2) تفريغ الجداول الموجودة في النسخة (الترحيلات تزرع بعضها، مثل job_counter) ثم التحميل — بوضع replica فلا تعمل الـtriggers
 TABLES=$(awk '{split($1,a,"."); printf "%s\"%s\".\"%s\"", (NR>1?", ":""), a[1], a[2]}' /tmp/expected.txt)
 psql "$DB" -v ON_ERROR_STOP=1 -q -c "set session_replication_role = replica; truncate $TABLES cascade;" > /tmp/restore.log 2>&1 \
-  || { echo "FAIL: truncate before restore"; tail -5 /tmp/restore.log; exit 1; }
-psql "$DB" -v ON_ERROR_STOP=1 -q -f "$DUMP" >> /tmp/restore.log 2>&1 || { echo "FAIL: restore"; grep -E 'ERROR' /tmp/restore.log | sed 's/DETAIL.*//' | cut -c1-160 | head -5; exit 1; }
+  || { echo "FAIL: truncate before restore"; detail "$(tail -5 /tmp/restore.log)"; exit 1; }
+psql "$DB" -v ON_ERROR_STOP=1 -q -f "$DUMP" >> /tmp/restore.log 2>&1 || { echo "FAIL: restore"; detail "$(grep -E 'ERROR' /tmp/restore.log | head -5)"; exit 1; }
 # 3) المطابقة
 bad=0
 while read -r t n; do

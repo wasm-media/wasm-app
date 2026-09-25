@@ -15,7 +15,10 @@ T=$(echo "$OUT" | sed -E 's/WASM_TEST_RESULTS ([0-9]+) total.*/\1/'); K=$(echo "
 [ -n "$T" ] && [ "$T" = "$K" ] && [ "$T" -ge "$(min sql)" ] || fail "sql tests ($OUT)"
 
 # 2) التزامن (اتصالات متوازية حقيقية)
-bash tests/sql/concurrency.sh "$DB_URL" || fail "concurrency"
+bash tests/sql/concurrency.sh "$DB_URL" | tee /tmp/conc.txt; [ "${PIPESTATUS[0]}" -eq 0 ] || fail "concurrency"
+# العدد من tests/COUNT يُفرض هنا كما للـSQL واللوحة (I10 — مراجعة الحزمة 1، المانع 2)
+C=$(grep -oE '^PASS concurrency \(([0-9]+) checks\)$' /tmp/conc.txt | grep -oE '[0-9]+' | tail -1)
+[ -n "$C" ] && [ "$C" -ge "$(min concurrency)" ] || fail "concurrency count ${C:-none} < $(min concurrency)"
 
 # 3) اللوحة على Supabase حقيقي
 for RUN in 390x844:ar-PS 1440x900:en-US; do
