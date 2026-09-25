@@ -34,10 +34,16 @@ insert into public.people(user_id, display_name)
   select id, case email when 'partner1@wasm.test' then 'الشريك الأول' when 'partner2@wasm.test' then 'الشريك الثاني' else 'موظف' end
   from auth.users where email like '%@wasm.test';
 SQL
+  # P18: بصمة بريد مدعو في جدول الزرع + رابط دعوة من واجهة الإدارة (لا بريد يُرسل)؛ الحساب يُنشأ عند توليد الرابط فيزرعه الـtrigger
+  psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "insert into private.partner_seed(email_sha256, display_name) values (encode(sha256(convert_to('invitee@wasm.test','UTF8')),'hex'), 'شريك مدعو')" || fail "seed invitee"
+  INVITE_LINK=$(curl -s -X POST "$API_URL/auth/v1/admin/generate_link" \
+    -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" -H 'content-type: application/json' \
+    -d '{"type":"invite","email":"invitee@wasm.test"}' | jq -r '.action_link // .properties.action_link // empty')
+  [ -n "$INVITE_LINK" ] || fail "generate invite link"
   REAL=1 CONFIG_URL="$API_URL" CONFIG_ANON="$ANON_KEY" WEB_ROOT="$ROOT/web" PORT=8080 node tests/ui/server.mjs > /tmp/srv.log 2>&1 & SV=$!
   for i in $(seq 1 30); do curl -s -o /dev/null http://127.0.0.1:8080/ && break; sleep 0.3; done
   VP=${RUN%%:*}; LANG_UI=${RUN##*:}
-  REAL=1 AUTH_URL="$API_URL" ANON_KEY="$ANON_KEY" VIEWPORT=$VP LANG_UI=$LANG_UI SHOTS=${SHOTS:-} node tests/ui/board.spec.mjs | tee /tmp/ui.txt; rc=${PIPESTATUS[0]}
+  REAL=1 AUTH_URL="$API_URL" ANON_KEY="$ANON_KEY" INVITE_LINK="$INVITE_LINK" VIEWPORT=$VP LANG_UI=$LANG_UI SHOTS=${SHOTS:-} node tests/ui/board.spec.mjs | tee /tmp/ui.txt; rc=${PIPESTATUS[0]}
   kill $SV 2>/dev/null
   [ "$rc" -eq 0 ] || fail "ui real $RUN"
   n=$(grep -c '^ok' /tmp/ui.txt); [ "$n" -ge "$(min ui_real)" ] || fail "ui_real count $n < $(min ui_real)"

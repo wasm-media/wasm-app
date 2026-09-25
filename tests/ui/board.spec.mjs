@@ -222,6 +222,51 @@ try {
   await bp.waitForSelector('[data-testid=error]', { timeout: 8000 }).catch(() => {});
   ok(await bp.isVisible('[data-testid=error]') && (await bp.$$('[data-testid=board]')).length === 0, 'wrong password: error, no board');
   await bc.close();
+
+  // ===== P18: رابط الدعوة ← تعيين كلمة السر ← اللوحة (Supabase حقيقي فقط؛ الرابط يولّده run_real.sh بواجهة الإدارة) =====
+  if (REAL) {
+    const INVITE = process.env.INVITE_LINK || '';
+    ok(INVITE.includes('/auth/v1/verify'), 'P18 invite link provided by the runner');
+    const ic = await browser.newContext({ viewport: { width: W, height: H }, locale: 'ar' });
+    const ip = await ic.newPage();
+    await ip.goto(INVITE);
+    await ip.waitForSelector('[data-testid=setpw-view]:not([hidden])', { timeout: 8000 }).catch(() => {});
+    ok(await ip.isVisible('[data-testid=setpw-view]') && !(await ip.isVisible('[data-testid=board]')), 'P18 invite link opens the set-password screen, no board yet');
+    ok(await ip.evaluate(() => location.hash === '' && !location.href.includes('access_token')), 'P18 token removed from the address bar');
+    ok(await ip.evaluate(() => localStorage.getItem('wasm.session')) === null, 'P18 nothing stored before the password is set');
+    await ip.fill('[data-testid=setpw-password]', 'Invitee-pass-2026');
+    await ip.fill('[data-testid=setpw-confirm]', 'Invitee-pass-2027');
+    await ip.click('[data-testid=setpw-submit]');
+    ok(await ip.isVisible('[data-testid=setpw-msg]') && await ip.isVisible('[data-testid=setpw-view]'), 'P18 mismatched passwords refused');
+    await ip.fill('[data-testid=setpw-password]', 'short1');
+    await ip.fill('[data-testid=setpw-confirm]', 'short1');
+    await ip.click('[data-testid=setpw-submit]');
+    ok(await ip.isVisible('[data-testid=setpw-msg]') && await ip.isVisible('[data-testid=setpw-view]'), 'P18 password under 8 characters refused');
+    await ip.fill('[data-testid=setpw-password]', 'Invitee-pass-2026');
+    await ip.fill('[data-testid=setpw-confirm]', 'Invitee-pass-2026');
+    await ip.click('[data-testid=setpw-submit]');
+    await ip.waitForSelector('[data-testid=board]', { timeout: 8000 }).catch(() => {});
+    ok(await ip.isVisible('[data-testid=board]'), 'P18 after setting the password the seeded partner sees the board');
+    await ip.waitForFunction(() => document.getElementById('who-name')?.textContent === 'شريك مدعو', null, { timeout: 5000 }).catch(() => {});
+    ok(await ip.evaluate(() => document.getElementById('who-name')?.textContent) === 'شريك مدعو', 'P18 display name comes from the seed (trigger)');
+    await ic.close();
+    // الدخول العادي بكلمة السر الجديدة
+    const nc = await browser.newContext({ viewport: { width: W, height: H }, locale: 'ar' });
+    const np = await nc.newPage();
+    await np.goto(BASE + '/');
+    await np.fill('[data-testid=login-email]', 'invitee@wasm.test');
+    await np.fill('[data-testid=login-password]', 'Invitee-pass-2026');
+    await np.click('[data-testid=login-submit]');
+    await np.waitForSelector('[data-testid=board]', { timeout: 8000 }).catch(() => {});
+    ok(await np.isVisible('[data-testid=board]'), 'P18 normal login with the new password works');
+    // الرابط نفسه مرة ثانية: مستعمل ← رسالة واضحة وشاشة الدخول، لا جلسة
+    await np.evaluate(() => localStorage.clear());
+    await np.goto(INVITE);
+    await np.waitForSelector('[data-testid=error]:not([hidden])', { timeout: 8000 }).catch(() => {});
+    ok(await np.isVisible('[data-testid=login-email]') && !(await np.isVisible('[data-testid=setpw-view]'))
+      && (await np.textContent('[data-testid=error]')).includes('رابط'), 'P18 reused invite link: clear message, login screen');
+    await nc.close();
+  }
   console.log(`PASS [${tag}] ${passed} checks`);
 } catch (e) {
   console.log(`FAIL [${tag}] exception: ${e.message.split('\n')[0]}`);

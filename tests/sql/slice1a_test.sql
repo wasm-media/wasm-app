@@ -387,6 +387,71 @@ begin
     perform pg_temp.rec('B2 owner+actor', false, st || ': ' || msg);
   end;
 
+  -- ===== P18 (الحزمة 1): زرع الشريكين — الدور والاسم لحساب جديد تطابق بصمة بريده صفًّا في private.partner_seed =====
+  -- البصمة = sha256 للبريد بحروف صغيرة بلا مسافات أطراف. لا بريد حقيقي في المستودع.
+  declare
+    s1 uuid := gen_random_uuid(); s2 uuid := gen_random_uuid(); s3 uuid := gen_random_uuid();
+    h text := encode(sha256(convert_to('seeded@wasm.test', 'UTF8')), 'hex');
+    h2 text := encode(sha256(convert_to('later@wasm.test', 'UTF8')), 'hex');
+  begin
+    begin
+      execute format('insert into private.partner_seed(email_sha256, display_name) values (%L, %L), (%L, %L)', h, 'شريك مزروع', h2, 'لاحق');
+      insert into auth.users(id, email, aud, role) values (s1, 'Seeded@WASM.test', 'authenticated', 'authenticated');
+      perform pg_temp.rec('P18 seeded email -> partner + name',
+        (select role::text from public.user_roles where user_id = s1) = 'partner'
+        and (select display_name from public.people where user_id = s1) = 'شريك مزروع', 'role/name');
+    exception when others then
+      get stacked diagnostics st = returned_sqlstate, msg = message_text;
+      perform pg_temp.rec('P18 seeded email -> partner + name', false, st || ': ' || msg);
+    end;
+    begin
+      insert into auth.users(id, email, aud, role) values (s2, 'stranger@wasm.test', 'authenticated', 'authenticated');
+      perform pg_temp.rec('P18 unseeded email -> no role, no name',
+        not exists (select 1 from public.user_roles where user_id = s2) and not exists (select 1 from public.people where user_id = s2), 'none');
+    exception when others then
+      get stacked diagnostics st = returned_sqlstate, msg = message_text;
+      perform pg_temp.rec('P18 unseeded email -> no role, no name', false, st || ': ' || msg);
+    end;
+    begin -- تغيير البريد إلى بريد مزروع لا يمنح شيئًا: الزرع عند الإنشاء فقط
+      insert into auth.users(id, email, aud, role) values (s3, 'x3@wasm.test', 'authenticated', 'authenticated');
+      update auth.users set email = 'later@wasm.test' where id = s3;
+      perform pg_temp.rec('P18 email change to seeded email grants nothing',
+        not exists (select 1 from public.user_roles where user_id = s3), 'insert-only');
+    exception when others then
+      get stacked diagnostics st = returned_sqlstate, msg = message_text;
+      perform pg_temp.rec('P18 email change to seeded email grants nothing', false, st || ': ' || msg);
+    end;
+    perform pg_temp.chk('P18 employee reads seed', 'employee', emp, 'select count(*) from private.partner_seed', '42501');
+    perform pg_temp.chk('P18 anon reads seed', 'anon', null, 'select count(*) from private.partner_seed', '42501');
+    perform pg_temp.chk('P18 partner adds seed', 'partner', p1,
+      format('insert into private.partner_seed(email_sha256, display_name) values (%L, %L)', repeat('a', 64), 'x'), '42501');
+    perform pg_temp.chk('P18 employee adds seed', 'employee', emp,
+      format('insert into private.partner_seed(email_sha256, display_name) values (%L, %L)', repeat('b', 64), 'x'), '42501');
+    perform pg_temp.chk('P18 bad fingerprint rejected', 'admin', null,
+      format('insert into private.partner_seed(email_sha256, display_name) values (%L, %L)', 'not-a-hash', 'x'), '23514');
+    perform pg_temp.chk('P18 blank name rejected', 'admin', null,
+      format('insert into private.partner_seed(email_sha256, display_name) values (%L, %L)', repeat('c', 64), U&'\200F '), '23514');
+    begin
+      perform pg_temp.rec('P18 seed trigger fn not callable by app roles',
+        to_regprocedure('private.seed_partner()') is not null
+        and not has_function_privilege('anon', 'private.seed_partner()', 'execute')
+        and not has_function_privilege('authenticated', 'private.seed_partner()', 'execute')
+        and not has_function_privilege('service_role', 'private.seed_partner()', 'execute'), 'execute');
+    exception when others then
+      get stacked diagnostics st = returned_sqlstate, msg = message_text;
+      perform pg_temp.rec('P18 seed trigger fn not callable by app roles', false, st || ': ' || msg);
+    end;
+    begin
+      perform pg_temp.rec('P18 seed table not writable by service_role',
+        to_regclass('private.partner_seed') is not null
+        and not has_table_privilege('service_role', 'private.partner_seed', 'insert')
+        and not has_table_privilege('service_role', 'private.partner_seed', 'select'), 'service_role');
+    exception when others then
+      get stacked diagnostics st = returned_sqlstate, msg = message_text;
+      perform pg_temp.rec('P18 seed table not writable by service_role', false, st || ': ' || msg);
+    end;
+  end;
+
   -- ينهي كل شيء بالتراجع ويحمل النتائج
   -- سطر ملخّص (يقرؤه الإنسان على التطوير) ثم JSON كامل بعد «##» (للمقارنة الآلية)
   raise exception 'WASM_TEST_RESULTS % ## %',
