@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# يثبت أن الحارس يستطيع الفشل: 23 طلب «فخ» يجب أن تُرفض، وطلب سليم واحد يجب أن يمرّ. يخرج 1 عند أي نتيجة غير متوقعة.
+# يثبت أن الحارس يستطيع الفشل: 24 طلب «فخ» يجب أن تُرفض، وطلب سليم واحد يجب أن يمرّ. يخرج 1 عند أي نتيجة غير متوقعة.
 set -u
 ROOT=$(cd "$(dirname "$0")/../.." && pwd); G="$ROOT/.github/guard/guard.sh"
 T=$(mktemp -d); cp -r "$ROOT/." "$T/r"; cd "$T/r" && rm -rf .git && git init -q -b main
@@ -45,4 +45,6 @@ cc() { # $1=اسم، $2=الملف المحمي الذي يعدّله main ثم 
   if [ "$got" = FAIL ]; then echo "ok   $3 → FAIL"; else echo "BAD  $3 → PASS (want FAIL)"; bad=1; fi; git checkout -q main; }
 cc t23 .github/guard/guard.sh "criss-cross merge reverts a guard file"
 cc t24 tests/COUNT "criss-cross merge lowers the test count"
-[ $bad -eq 0 ] && echo "PASS guard selftest (24)" || { echo "FAIL guard selftest"; exit 1; }
+# P24: سجل القرارات من ملفات الحراسة (عمود «اعتمده عيسى» لا يكتبه غيره)
+git checkout -qb t25; echo "| D99 | 01/01/2027 | قرار مزروع | x | نعم |" >> docs/DECISIONS.md; c t25; report "$(git rev-parse HEAD)"; run "add a decision row" FAIL
+[ $bad -eq 0 ] && echo "PASS guard selftest (25)" || { echo "FAIL guard selftest"; exit 1; }

@@ -20,7 +20,8 @@ echo "== changed files =="; for f in "${CH[@]}"; do printf '%q\n' "$f"; done
 # 1) ملفات الحراسة: لا يمسّها أي PR (عيسى يعدّلها بنفسه على main) — إضافة أو تعديل أو حذف أو نقل
 # tests/ui/run_ui.sh = مشغّل المحاكي الذي يعدّ فحوصه run_mock.sh (0أ بند 2.6: إعدادات مشغّل الاختبارات)
 # CODEOWNERS: GitHub يقرؤه من .github/ أو الجذر أو docs/ — الثلاثة محمية
-PROTECTED='^(\.github/|tests/ci/|tests/COUNT$|tests/ui/run_ui\.sh$|docs/00-|docs/INVARIANTS\.md$|CODEOWNERS$|docs/CODEOWNERS$)'
+# docs/DECISIONS.md: القرارات وعمود «اعتمده عيسى» (P24، قرار عيسى 26/09/2026)
+PROTECTED='^(\.github/|tests/ci/|tests/COUNT$|tests/ui/run_ui\.sh$|docs/00-|docs/INVARIANTS\.md$|docs/DECISIONS\.md$|CODEOWNERS$|docs/CODEOWNERS$)'
 hit=(); for f in "${CH[@]}"; do [[ "$f" =~ $PROTECTED ]] && hit+=("$(printf '%q' "$f")"); done
 [ ${#hit[@]} -gt 0 ] && err "guard files touched: ${hit[*]}"
 
