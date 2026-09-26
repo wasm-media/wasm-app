@@ -1,0 +1,80 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  guard-selftest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: the guard must reject 23 trap PRs and pass 1 clean PR
+        run: bash tests/ci/guard_selftest.sh
+  ui-mock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: tools
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+          npm i -g playwright@1.56.0
+          npx -y playwright@1.56.0 install --with-deps chromium
+          mkdir -p /tmp/pgrst
+          curl -sSL -o /tmp/pgrst.tar.xz https://github.com/PostgREST/postgrest/releases/download/v12.2.3/postgrest-v12.2.3-linux-static-x64.tar.xz
+          echo "9f71269e61ac3a940281e93ff415760f5957e430e475ba4c3889f3ede7d5527c  /tmp/pgrst.tar.xz" | sha256sum -c -
+          tar -xJf /tmp/pgrst.tar.xz -C /tmp/pgrst
+      - name: board with mock auth (2 viewports, 2 browser languages)
+        env:
+          PGADMIN: postgresql://postgres:postgres@127.0.0.1:5432
+          SHOTS: ${{ runner.temp }}/shots
+        run: mkdir -p "$SHOTS" && bash tests/ci/run_mock.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shots-mock
+          path: ${{ runner.temp }}/shots
+  supabase-real:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.118.0   # مثبّت: نفس النسخة في release وbackup (مقيسة محليًا 25/09/2026)
+      - name: tools
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+          npm i -g playwright@1.56.0
+          npx -y playwright@1.56.0 install --with-deps chromium
+      - name: start Supabase (Postgres + PostgREST + Auth)
+        run: supabase start -x realtime,storage-api,imgproxy,studio,edge-runtime,logflare,vector
+      - name: SQL + concurrency + board on real Supabase
+        env:
+          SHOTS: ${{ runner.temp }}/shots
+        run: mkdir -p "$SHOTS" && bash tests/ci/run_real.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shots-real
+          path: ${{ runner.temp }}/shots

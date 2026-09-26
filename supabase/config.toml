@@ -1,0 +1,18 @@
+# إعداد Supabase المحلي (للـCI فقط: `supabase start`). الإنتاج يُضبط من لوحته ويُقاس (P17، P19).
+project_id = "wasm-app"
+
+[db]
+major_version = 17
+
+[auth]
+site_url = "http://127.0.0.1:8080"
+jwt_expiry = 3600
+enable_signup = false                  # P17: لا تسجيل ذاتي — الحسابات بدعوة فقط
+enable_refresh_token_rotation = true   # P19: تدوير رموز التجديد وكشف إعادة استعمالها
+refresh_token_reuse_interval = 10
+
+[auth.email]
+# true = مزوّد البريد نفسه يعمل (الدخول بكلمة السر). false هنا يُطفئ الدخول كله (email_provider_disabled، مقيس)،
+# وإغلاق التسجيل الذاتي يأتي من [auth] enable_signup = false أعلاه.
+enable_signup = true
+enable_confirmations = false

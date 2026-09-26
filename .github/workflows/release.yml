@@ -1,0 +1,107 @@
+name: release
+# النشر = دمج في main (البروتوكول §0). يعمل بعد نجاح ci على main فقط، في بيئة production:
+# موافقة عيسى على كل تشغيل (Required reviewers)، وأسرارها لا تصل إلا لفرع main (I12 — Claude لا يراها).
+# في تشغيل واحد: الترحيلات ← ضبط Auth وإثباته ← المفتاح العام ← نشر Pages ← فحص قراءة فقط ← روابط الشريكين.
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      relink:
+        description: "رابط دخول جديد لحساب موجود (إن انتهى الرابط الأول قبل استعماله)"
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: release
+  cancel-in-progress: false
+env:
+  PROJECT_REF: dldxfkbuxpokryfjjhrq
+  SUPABASE_URL: https://dldxfkbuxpokryfjjhrq.supabase.co
+  SITE_URL: https://wasm-media.github.io/wasm-app/
+jobs:
+  release:
+    # workflow_run: فقط push على main في هذا المستودع نفسه نجح فيه ci (لا PR، ولا fork بفرع اسمه main)
+    if: >-
+      github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' ||
+      github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          persist-credentials: false
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.118.0
+      - name: migrations (supabase db push)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          supabase link --project-ref "$PROJECT_REF" -p "$SUPABASE_DB_PASSWORD" > /dev/null
+          supabase db push --linked -p "$SUPABASE_DB_PASSWORD" --yes
+          supabase migration list --linked -p "$SUPABASE_DB_PASSWORD"
+      - name: auth config (P17, P19) — set, read back, verify
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: bash .github/ops/auth_config.sh
+      - name: public key → web/config.js (anon or publishable only — I6, I12)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          supabase projects api-keys --project-ref "$PROJECT_REF" --reveal -o json > "$RUNNER_TEMP/keys.json"
+          jq -r '.[].api_key // empty' "$RUNNER_TEMP/keys.json" | while read -r k; do echo "::add-mask::$k"; done
+          PUB=$(bash .github/ops/public_key.sh "$RUNNER_TEMP/keys.json")
+          rm -f "$RUNNER_TEMP/keys.json"
+          rm -rf _site && cp -r web _site
+          jq -rn --arg u "$SUPABASE_URL" --arg k "$PUB" '"window.WASM_CONFIG = " + ({url: $u, anonKey: $k} | tojson) + ";"' > _site/config.js
+          grep -qE 'sb_secret_|service_role' _site/config.js && { echo "FAIL: secret in config.js"; exit 1; } || true
+          echo "config.js written (${#PUB} chars key)"
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4
+      - name: read-only check on production (§2 step 7, P17, I5, N12)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 20); do curl -sf "${SITE_URL}config.js" -o "$RUNNER_TEMP/live.js" && grep -q "$SUPABASE_URL" "$RUNNER_TEMP/live.js" && break; sleep 6; done
+          grep -q "$SUPABASE_URL" "$RUNNER_TEMP/live.js" || { echo "FAIL: live config.js does not point to production"; exit 1; }
+          echo "ok   live site serves the production config"
+          PUBLIC_KEY=$(sed -E 's/.*"anonKey":"([^"]+)".*/\1/' "$RUNNER_TEMP/live.js") SUPABASE_URL="$SUPABASE_URL" bash .github/ops/prod_probe.sh
+      - name: first-login links for the partners (P18) → private repo wasm-app-backups
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          PARTNER_EMAILS: ${{ secrets.PARTNER_EMAILS }}
+          BACKUP_DEPLOY_KEY: ${{ secrets.BACKUP_DEPLOY_KEY }}
+          RELINK: ${{ inputs.relink && '1' || '0' }}
+        run: |
+          set -euo pipefail
+          supabase projects api-keys --project-ref "$PROJECT_REF" --reveal -o json > "$RUNNER_TEMP/keys.json"
+          jq -r '.[].api_key // empty' "$RUNNER_TEMP/keys.json" | while read -r k; do echo "::add-mask::$k"; done
+          SERVICE_KEY=$(jq -r '([.[] | select(.name == "service_role" and (.api_key | startswith("eyJ")))][0].api_key)
+                               // ([.[] | select(.type == "secret")][0].api_key) // empty' "$RUNNER_TEMP/keys.json")
+          rm -f "$RUNNER_TEMP/keys.json"
+          [ -n "$SERVICE_KEY" ] || { echo "FAIL: no admin key"; exit 1; }
+          OUT="$RUNNER_TEMP/invites.md" SERVICE_KEY="$SERVICE_KEY" bash .github/ops/invites.sh
+          if [ "$(cat "$RUNNER_TEMP/invites.md.count")" -gt 0 ]; then
+            bash .github/ops/push_private.sh "first-login links $(date -u +%F)" "$RUNNER_TEMP/invites.md:invites/latest.md"
+          fi
+          rm -f "$RUNNER_TEMP/invites.md"
