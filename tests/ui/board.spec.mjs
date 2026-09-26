@@ -202,8 +202,9 @@ try {
   const ec = await browser.newContext({ viewport: { width: W, height: H }, locale: 'ar' });
   const ep = await ec.newPage();
   await login(ep, 'employee@wasm.test');
-  await ep.waitForSelector('[data-testid=no-access]', { timeout: 8000 }).catch(() => {});
-  ok(await ep.isVisible('[data-testid=no-access]'), '3.3 employee sees no-access message');
+  await ep.waitForSelector('[data-testid=tasks-view]', { timeout: 8000 }).catch(() => {});
+  ok(await ep.isVisible('[data-testid=tasks-view]') && !(await ep.isVisible('[data-testid=no-access]')) && (await ep.$$('[data-testid=tab-board]')).length === 0,
+    '3.3 employee sees only «مهامي» (slice 2), no board tab');
   ok((await ep.$$('[data-testid=board]')).length === 0, '3.3 employee: no board');
   ok((await ep.$$('[data-testid^=card-]')).length === 0, '3.3 employee: no job cards');
   const et = await ep.evaluate(() => document.body.innerText);

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # CI — على Supabase حقيقي من `supabase start` (نفس Postgres وPostgREST وAuth المستعملة في الإنتاج):
-# اختبارات SQL، ثم التزامن، ثم اللوحة بوضع REAL على عرضين (دخول وخروج حقيقيان، والتسجيل الذاتي مرفوض).
+# اختبارات SQL، ثم التزامن، ثم اللوحة بوضع REAL على عرضين (دخول وخروج حقيقيان، والتسجيل الذاتي مرفوض)،
+# ثم — حين يحملها الفرع — المهام والملفات والمدير (الشريحة 2) على العرضين نفسيهما.
 set -uo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd); cd "$ROOT"
 fail() { echo "FAIL: $*"; exit 1; }
@@ -47,8 +48,36 @@ SQL
   for i in $(seq 1 30); do curl -s -o /dev/null http://127.0.0.1:8080/ && break; sleep 0.3; done
   VP=${RUN%%:*}; LANG_UI=${RUN##*:}
   REAL=1 AUTH_URL="$API_URL" ANON_KEY="$ANON_KEY" INVITE_LINK="$INVITE_LINK" VIEWPORT=$VP LANG_UI=$LANG_UI SHOTS=${SHOTS:-} node tests/ui/board.spec.mjs | tee /tmp/ui.txt; rc=${PIPESTATUS[0]}
+  [ "$rc" -eq 0 ] || { kill $SV 2>/dev/null; fail "ui real $RUN"; }
+  n=$(grep -c '^ok' /tmp/ui.txt); [ "$n" -ge "$(min ui_real)" ] || { kill $SV 2>/dev/null; fail "ui_real count $n < $(min ui_real)"; }
+  # الشريحة 2 (حين يحملها الفرع): المهام والملفات والمدير على Supabase حقيقي بـStorage حقيقي.
+  # هويات إضافية: موظف ب، المدير، وحساب موظف باسم دخول بلا بريد تزرعه بصمته بدور employee (D29).
+  if [ -f tests/ui/tasks.spec.mjs ]; then
+    for u in employee2 manager; do
+      code=$(curl -s -o /tmp/u.json -w '%{http_code}' -X POST "$API_URL/auth/v1/admin/users" \
+        -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" -H 'content-type: application/json' \
+        -d "{\"email\":\"$u@wasm.test\",\"password\":\"test-pass\",\"email_confirm\":true}")
+      [ "$code" = 200 ] || { kill $SV 2>/dev/null; fail "create user $u ($code: $(cat /tmp/u.json))"; }
+    done
+    psql "$DB_URL" -v ON_ERROR_STOP=1 -q <<'SQL' || { kill $SV 2>/dev/null; fail "seed slice-2 roles/names"; }
+insert into public.user_roles(user_id, role)
+  select id, case email when 'manager@wasm.test' then 'manager'::public.app_role else 'employee'::public.app_role end
+  from auth.users where email in ('employee2@wasm.test', 'manager@wasm.test');
+insert into public.people(user_id, display_name)
+  select id, case email when 'manager@wasm.test' then 'المدير' else 'موظف ب' end
+  from auth.users where email in ('employee2@wasm.test', 'manager@wasm.test');
+insert into private.partner_seed(email_sha256, display_name, role)
+  values (encode(sha256(convert_to('staff.test.user@wasmmedia.net', 'UTF8')), 'hex'), 'موظف باسم دخول', 'employee');
+SQL
+    code=$(curl -s -o /tmp/u.json -w '%{http_code}' -X POST "$API_URL/auth/v1/admin/users" \
+      -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" -H 'content-type: application/json' \
+      -d '{"email":"staff.test.user@wasmmedia.net","password":"test.user","email_confirm":true}')
+    [ "$code" = 200 ] || { kill $SV 2>/dev/null; fail "create staff username user ($code: $(cat /tmp/u.json))"; }
+    REAL=1 AUTH_URL="$API_URL" ANON_KEY="$ANON_KEY" VIEWPORT=$VP LANG_UI=$LANG_UI SHOTS=${SHOTS:-} node tests/ui/tasks.spec.mjs | tee /tmp/tasks.txt; rc=${PIPESTATUS[0]}
+    [ "$rc" -eq 0 ] || { kill $SV 2>/dev/null; fail "ui tasks $RUN"; }
+    m=$(min ui_tasks); n=$(grep -c '^ok' /tmp/tasks.txt)
+    [ "$n" -ge "${m:-40}" ] || { kill $SV 2>/dev/null; fail "ui_tasks count $n < ${m:-40}"; }
+  fi
   kill $SV 2>/dev/null
-  [ "$rc" -eq 0 ] || fail "ui real $RUN"
-  n=$(grep -c '^ok' /tmp/ui.txt); [ "$n" -ge "$(min ui_real)" ] || fail "ui_real count $n < $(min ui_real)"
 done
 echo "PASS real"

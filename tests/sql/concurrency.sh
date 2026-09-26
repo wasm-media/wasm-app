@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# فحص 1.2 + التزامن على النقل (B3): يفشل برمز خروج غير صفري إن لم تتحقق كل الشروط.
+# فحص 1.2 + التزامن على النقل (B3) + حالة المهمة (الشريحة 2): يفشل برمز خروج غير صفري إن لم تتحقق كل الشروط.
 # يحتاج اتصالات متوازية حقيقية، فيُشغَّل على Postgres محلي (ثم في CI). DB = قاعدة فيها shim + الترحيلات.
 set -uo pipefail
 DB=${1:?db}
@@ -46,4 +46,22 @@ N=$(grep -lxE 'quote|cancelled' "$OUT"/x1.out "$OUT"/x2.out | wc -l)
 L2=$(psql -qtA -d "$DB" -c "select count(*) from public.job_stage_log where job_number=9002")
 echo "move-vs-cancel: winners=$N log=$L2"
 [ "$N" = "1" ] && [ "$L2" = "1" ] || fail "move-vs-cancel expected 1 winner and 1 log line"
-echo "PASS concurrency (3 checks)"
+# (د) الشريحة 2: 10 تغييرات متزامنة متطابقة لحالة مهمة واحدة من «جديدة» ← نجاح واحد، 9 stale_status، وسطر سجل واحد
+E=33333333-3333-3333-3333-333333333333
+psql -q -v ON_ERROR_STOP=1 -d "$DB" <<SQL || fail "task fixtures"
+insert into auth.users(id,email,aud,role) values ('$E','e@wasm.test','authenticated','authenticated');
+insert into public.user_roles values ('$E','employee');
+SQL
+TID=$(psql -qtA -d "$DB" -c "$(as_partner $P1 "select public.create_task(9003,'مهمة التزامن','$E');")" | grep -E '^[0-9]+$')
+[ -n "$TID" ] || fail "create task"
+psql -qtA -d "$DB" -c "$(as_partner $E "select public.set_task_status($TID,'new','in_progress'); select pg_sleep(1);")" > "$OUT/ts_1.out" 2>&1 &
+sleep 0.3
+for k in $(seq 2 10); do
+  psql -qtA -d "$DB" -c "$(as_partner $E "select public.set_task_status($TID,'new','in_progress');")" > "$OUT/ts_$k.out" 2>&1 &
+done
+wait
+OK=$(grep -lx 'in_progress' "$OUT"/ts_*.out | wc -l); STALE=$(grep -l 'stale_status' "$OUT"/ts_*.out | wc -l)
+L3=$(psql -qtA -d "$DB" -c "select status||'|'||(select count(*) from public.task_log where task_id=$TID and kind='status') from public.tasks where id=$TID")
+echo "task status: ok=$OK stale=$STALE state=$L3"
+[ "$OK" = "1" ] && [ "$STALE" = "9" ] && [ "$L3" = "in_progress|1" ] || fail "task status expected ok=1 stale=9 in_progress|1"
+echo "PASS concurrency (4 checks)"
