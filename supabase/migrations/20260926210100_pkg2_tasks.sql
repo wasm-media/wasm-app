@@ -317,7 +317,11 @@ begin
     if not private.is_blank(p_note) then raise exception 'invalid_transition'; end if;
   elsif p_from = 'ready_for_review' and p_to in ('done', 'in_progress') then
     if v_role not in ('partner', 'manager') then raise exception 'not_allowed'; end if;
-    if v_role = 'manager' and t.assignee = v_uid then raise exception 'own_review'; end if;
+    -- المدير لا يراجع مهمة هو مكلَّف بها، ولا مهمة سلّمها هو للمراجعة ثم أعاد تكليفها (مراجعة ج1، B1)
+    if v_role = 'manager' and (t.assignee = v_uid or exists (select 1 from public.task_log l
+         where l.task_id = t.id and l.kind = 'status' and l.to_status = 'ready_for_review' and l.by_user = v_uid)) then
+      raise exception 'own_review';
+    end if;
     if v_ret and private.is_blank(p_note) then raise exception 'note_required'; end if;
     if not v_ret and not private.is_blank(p_note) then raise exception 'invalid_transition'; end if;
   else

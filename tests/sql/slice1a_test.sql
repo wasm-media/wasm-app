@@ -479,7 +479,7 @@ begin
   declare
     mgr uuid := gen_random_uuid(); e2 uuid := gen_random_uuid();
     j1 int; j2 int; j3 int;
-    t1 bigint; t2 bigint; t3 bigint; t4 bigint; t5 bigint; t6 bigint; t7 bigint; t8 bigint;
+    t1 bigint; t2 bigint; t3 bigint; t4 bigint; t5 bigint; t6 bigint; t7 bigint; t8 bigint; t9 bigint;
     f1 bigint; f2 bigint; f3 bigint; path1 text; path2 text; path3 text; r text; lb int; la int;
     blob jsonb := '{"size": 1000, "mimetype": "application/pdf"}';
   begin
@@ -625,6 +625,19 @@ begin
     perform pg_temp.chk('2C manager approves own task', 'manager', mgr, format($q$select public.set_task_status(%s,'ready_for_review','done')$q$, t5), 'own_review');
     perform pg_temp.chk('2C manager returns own task', 'manager', mgr, format($q$select public.set_task_status(%s,'ready_for_review','in_progress','x')$q$, t5), 'own_review');
     perform pg_temp.chk('2C partner approves manager''s task', 'partner', p1, format($q$select public.set_task_status(%s,'ready_for_review','done')$q$, t5), 'ok');
+    -- مراجعة الحزمة 2 ج1 (B1): المدير لا يلتف على own_review بإعادة تكليف مهمته بعد تسليمها ثم اعتمادها
+    begin
+      t9 := pg_temp.val('manager', mgr, format($q$select public.create_task(%s, 'مهمة المدير الثانية', %L)$q$, j1, mgr))::bigint;
+      perform pg_temp.val('manager', mgr, format($q$select public.set_task_status(%s,'new','in_progress')$q$, t9));
+      perform pg_temp.val('manager', mgr, format($q$select public.set_task_status(%s,'in_progress','ready_for_review')$q$, t9));
+      perform pg_temp.val('manager', mgr, format('select public.assign_task(%s, %L)', t9, e2));
+    exception when others then
+      get stacked diagnostics st = returned_sqlstate, msg = message_text;
+      perform pg_temp.rec('2C own_review bypass setup', false, st || ': ' || msg);
+    end;
+    perform pg_temp.chk('2C manager approves a task he submitted, after reassigning it', 'manager', mgr, format($q$select public.set_task_status(%s,'ready_for_review','done')$q$, t9), 'own_review');
+    perform pg_temp.chk('2C manager returns a task he submitted, after reassigning it', 'manager', mgr, format($q$select public.set_task_status(%s,'ready_for_review','in_progress','x')$q$, t9), 'own_review');
+    perform pg_temp.chk('2C partner approves it', 'partner', p1, format($q$select public.set_task_status(%s,'ready_for_review','done')$q$, t9), 'ok');
     perform pg_temp.chk('2C employee B -> ready', 'employee', e2, format($q$select public.set_task_status(%s,'new','in_progress')$q$, t3), 'ok');
     perform pg_temp.chk('2C employee B -> ready 2', 'employee', e2, format($q$select public.set_task_status(%s,'in_progress','ready_for_review')$q$, t3), 'ok');
     perform pg_temp.chk('2C manager returns employee''s task with note', 'manager', mgr, format($q$select public.set_task_status(%s,'ready_for_review','in_progress','أضف الشعار')$q$, t3), 'ok');
@@ -754,12 +767,12 @@ begin
       perform pg_temp.rec('2A reassign: new assignee, one log line',
         (select assignee from public.tasks where id = t2) = e2 and (select count(*) from public.task_log where task_id = t2) = lb + 1
         and (select kind || '/' || from_assignee || '>' || to_assignee from public.task_log where task_id = t2 order by id desc limit 1) = 'assign/' || emp || '>' || e2, 'assign');
-      perform pg_temp.rec('2A after reassign: A sees 1 task, no log, no file; B sees 2',
+      perform pg_temp.rec('2A after reassign: A sees 1 task, no log, no file; B sees 3',
         pg_temp.v('employee', emp, 'select count(*) from public.tasks') = '1'
         and pg_temp.v('employee', emp, format('select count(*) from public.task_log where task_id = %s', t2)) = '0'
         and pg_temp.v('employee', emp, format('select count(*) from public.task_files where task_id = %s', t2)) = '0'
         and pg_temp.v('employee', emp, format('select count(*) from storage.objects where name = %L', path1)) = '0'
-        and pg_temp.v('employee', e2, 'select count(*) from public.tasks') = '2'
+        and pg_temp.v('employee', e2, 'select count(*) from public.tasks') = '3'
         and pg_temp.v('employee', e2, format('select count(*) from storage.objects where name = %L', path1)) = '1', 'revoked');
     exception when others then
       get stacked diagnostics st = returned_sqlstate, msg = message_text;
@@ -817,7 +830,7 @@ begin
     perform pg_temp.rec('2A every task has its creation line',
       (select count(*) from public.tasks t where job_number = j1 and not exists
         (select 1 from public.task_log l where l.task_id = t.id and l.kind = 'create' and l.to_status = 'new' and l.to_assignee is not null)) = 0
-      and (select count(*) from public.tasks where job_number = j1) = 5, 'create lines');
+      and (select count(*) from public.tasks where job_number = j1) = 6, 'create lines');
 
     -- ---------- D27-2: إلغاء الشغلة يلغي مهامها المفتوحة؛ التسليم مرفوض مع مهمة مفتوحة ----------
     begin
