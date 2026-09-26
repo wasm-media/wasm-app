@@ -1,4 +1,4 @@
-reviewed: aadc245
+reviewed: aadc2457dc1d7aef7e11ec0811caab819d50dabb
 
 # مراجعة مستقلة — الحزمة 2 — الجولة 2 (البروتوكول §9.1 البند 5)
 
