@@ -1,7 +1,8 @@
 name: release
 # النشر = دمج في main (البروتوكول §0). يعمل بعد نجاح ci على main فقط، في بيئة production:
 # موافقة عيسى على كل تشغيل (Required reviewers)، وأسرارها لا تصل إلا لفرع main (I12 — Claude لا يراها).
-# في تشغيل واحد: الترحيلات ← ضبط Auth وإثباته ← المفتاح العام ← نشر Pages ← فحص قراءة فقط ← روابط الشريكين.
+# في تشغيل واحد: الترحيلات ← ضبط Auth وإثباته ← المفتاح العام ← نشر Pages ← فحص قراءة فقط ← روابط الشريكين
+# ← حسابات الموظفين بلا بريد (D29) وفحص حاوية الملفات قراءةً فقط (الشريحة 2).
 on:
   workflow_run:
     workflows: [ci]
@@ -13,6 +14,10 @@ on:
         description: "رابط دخول جديد لحساب موجود (إن انتهى الرابط الأول قبل استعماله)"
         type: boolean
         default: false
+      staff_reset:
+        description: "أسماء دخول موظفين تُعاد كلمة سرها إلى الاسم نفسه (مفصولة بفواصل، مثل reem.qattanani) — D29"
+        type: string
+        default: ""
 permissions:
   contents: read
   pages: write
@@ -105,3 +110,19 @@ jobs:
             bash .github/ops/push_private.sh "first-login links $(date -u +%F)" "$RUNNER_TEMP/invites.md:invites/latest.md"
           fi
           rm -f "$RUNNER_TEMP/invites.md"
+      - name: staff accounts without email (D29) + task-files bucket check (read-only, D27-5)
+        if: hashFiles('supabase/staff.txt') != ''   # يُفعَّل مع PR الشريحة 2 (قائمة الأسماء وترحيل بصماتها وحاوية الملفات معًا)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          STAFF_RESET: ${{ inputs.staff_reset }}
+        run: |
+          set -euo pipefail
+          supabase projects api-keys --project-ref "$PROJECT_REF" --reveal -o json > "$RUNNER_TEMP/keys.json"
+          jq -r '.[].api_key // empty' "$RUNNER_TEMP/keys.json" | while read -r k; do echo "::add-mask::$k"; done
+          SERVICE_KEY=$(jq -r '([.[] | select(.name == "service_role" and (.api_key | startswith("eyJ")))][0].api_key)
+                               // ([.[] | select(.type == "secret")][0].api_key) // empty' "$RUNNER_TEMP/keys.json")
+          PUBLIC_KEY=$(bash .github/ops/public_key.sh "$RUNNER_TEMP/keys.json")
+          rm -f "$RUNNER_TEMP/keys.json"
+          [ -n "$SERVICE_KEY" ] || { echo "FAIL: no admin key"; exit 1; }
+          SERVICE_KEY="$SERVICE_KEY" bash .github/ops/staff_accounts.sh
+          SERVICE_KEY="$SERVICE_KEY" PUBLIC_KEY="$PUBLIC_KEY" bash .github/ops/storage_check.sh
