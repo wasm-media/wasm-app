@@ -14,7 +14,7 @@
       <span class="brand-mark" aria-hidden="true"></span>
       <span class="brand-name">وسم ميديا</span>
       <span class="brand-sep" aria-hidden="true"></span>
-      <span class="brand-page">لوحة الشغلات</span>
+      <span class="brand-page" id="brand-page">لوحة الشغلات</span>
     </div>
     <div class="who" id="who" hidden>
       <span id="who-name"></span>
@@ -29,7 +29,7 @@
     <section class="login" id="login-view" hidden>
       <form class="login-card" id="login-form">
         <h1>تسجيل الدخول</h1>
-        <label>البريد الإلكتروني<input data-testid="login-email" id="login-email" type="email" autocomplete="username" dir="ltr" required></label>
+        <label>البريد أو اسم الدخول<input data-testid="login-email" id="login-email" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" dir="ltr" required></label>
         <label>كلمة المرور<input data-testid="login-password" id="login-password" type="password" autocomplete="current-password" dir="ltr" required></label>
         <button class="btn-primary" data-testid="login-submit" type="submit">دخول</button>
       </form>
@@ -48,11 +48,30 @@
 
     <!-- لا صلاحية -->
     <section class="empty-state" data-testid="no-access" id="no-access" hidden>
-      <h1>لا توجد لك صلاحية على لوحة الشغلات</h1>
-      <p>اللوحة للشريكين فقط. مهامك ستظهر لك في قسم المهام عند إطلاقه.</p>
+      <h1>لا توجد لك صلاحية بعد</h1>
+      <p>حسابك يعمل، لكن لم يُحدَّد له دور. تواصل مع الإدارة.</p>
     </section>
 
-    <!-- اللوحة: لا تدخل الصفحة إلا بعد أن يؤكد السيرفر أن المستخدم شريك -->
+    <!-- التنقل: للشريك والمدير فقط (الموظف يرى «مهامي» وحدها) -->
+    <template id="nav-tpl">
+    <nav class="tabs" id="tabs">
+      <button type="button" class="tab" data-testid="tab-board" data-tab="board">الشغلات</button>
+      <button type="button" class="tab" data-testid="tab-tasks" data-tab="tasks">المهام</button>
+    </nav>
+    </template>
+
+    <!-- المهام: لكل الأدوار؛ ما يظهر فيها يقرره السيرفر (الموظف: مهامه الحالية فقط) -->
+    <template id="tasks-tpl">
+    <section id="tasks-view" data-testid="tasks-view">
+      <div class="board-bar">
+        <h1 class="board-title"><span id="tasks-heading">المهام</span> <span class="count" id="tasks-open-count"></span></h1>
+        <button class="btn-primary" data-testid="new-task" id="new-task" type="button" hidden>مهمة جديدة</button>
+      </div>
+      <div class="task-groups" id="task-groups"></div>
+    </section>
+    </template>
+
+    <!-- اللوحة: لا تدخل الصفحة إلا بعد أن يؤكد السيرفر أن المستخدم شريك أو مدير -->
     <template id="board-tpl">
     <section id="board-view">
       <div class="board-bar">
@@ -109,6 +128,59 @@
         <button class="btn-danger" data-testid="cancel-confirm" type="submit">تأكيد الإلغاء</button>
       </div>
     </form>
+  </dialog>
+
+  <!-- مهمة جديدة / تعديل مهمة -->
+  <dialog class="sheet" id="task-dialog">
+    <form id="task-form" method="dialog">
+      <h2 id="task-dialog-title">مهمة جديدة</h2>
+      <label id="tf-job-label">الشغلة<select data-testid="tf-job" name="job"></select></label>
+      <label>عنوان المهمة<input data-testid="tf-title" name="title" maxlength="200"></label>
+      <label id="tf-assignee-label">المكلَّف<select data-testid="tf-assignee" name="assignee"></select></label>
+      <label>الموعد (يوم/شهر/سنة)<input data-testid="tf-due" name="due" inputmode="numeric" dir="ltr" placeholder="05/10/2026" maxlength="10" autocomplete="off"></label>
+      <label>وصف قصير<textarea data-testid="tf-desc" name="desc" rows="3" maxlength="2000"></textarea></label>
+      <p class="form-msg" data-testid="tf-msg" id="tf-msg" hidden></p>
+      <div class="actions">
+        <button class="btn-ghost" type="button" data-close>تراجع</button>
+        <button class="btn-primary" data-testid="tf-submit" type="submit">حفظ</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- إعادة تكليف -->
+  <dialog class="sheet" id="assign-dialog">
+    <form id="assign-form" method="dialog">
+      <h2>إعادة تكليف المهمة</h2>
+      <label>المكلَّف الجديد<select data-testid="assign-select" id="assign-select"></select></label>
+      <div class="actions">
+        <button class="btn-ghost" type="button" data-close>تراجع</button>
+        <button class="btn-primary" data-testid="assign-confirm" type="submit">تكليف</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- سبب إلغاء المهمة / ملاحظة إعادتها -->
+  <dialog class="sheet" id="reason-dialog">
+    <form id="reason-form" method="dialog">
+      <h2 id="reason-title"></h2>
+      <p class="hint" id="reason-hint"></p>
+      <label id="reason-label"><span id="reason-label-text"></span><textarea data-testid="reason-text" id="reason-text" rows="3" maxlength="1000"></textarea></label>
+      <p class="form-msg" id="reason-msg" hidden></p>
+      <div class="actions">
+        <button class="btn-ghost" type="button" data-close>تراجع</button>
+        <button class="btn-primary" data-testid="reason-confirm" id="reason-confirm" type="submit">تأكيد</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- سجل المهمة -->
+  <dialog class="drawer" id="task-log-dialog" data-testid="task-log-panel">
+    <div class="drawer-head">
+      <h2>سجل المهمة</h2>
+      <button class="btn-ghost" data-testid="task-log-close" type="button" data-close>إغلاق</button>
+    </div>
+    <div class="log-meta" id="task-log-meta"></div>
+    <ol class="log" id="task-log-list"></ol>
   </dialog>
 
   <!-- السجل -->

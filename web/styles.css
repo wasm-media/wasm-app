@@ -120,12 +120,46 @@ dialog::backdrop { background: rgba(20,33,61,.45); }
 /* التنبيه */
 .toast { position: fixed; z-index: 20; inset-inline: 16px; bottom: 16px; margin-inline: auto; max-width: 560px; background: var(--navy); color: #fff; padding: 12px 16px; border-radius: 12px; border-right: 4px solid var(--gold); box-shadow: 0 8px 24px rgba(20,33,61,.25); }
 
+/* التنقل بين الشغلات والمهام (الشريك والمدير) */
+#app-view { padding: 0; }
+.tabs { display: flex; gap: 6px; padding: 14px 20px 0; }
+.tab { background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 7px 16px; font-weight: 500; color: var(--slate); cursor: pointer; }
+.tab.active { background: var(--navy); border-color: var(--navy); color: #fff; }
+
+/* المهام */
+#tasks-view { padding: 20px 20px 40px; }
+.task-groups { display: grid; gap: 14px; }
+.task-group { background: #EEF1F5; border-radius: var(--radius); border-top: 3px solid var(--azure); }
+.task-group.group-ready_for_review { border-top-color: var(--gold); }
+.task-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 10px; padding: 4px 10px 12px; }
+.task-closed .task-list { padding: 10px 0 0; }
+.task .desc { font-size: 13px; white-space: pre-wrap; }
+.tag.st-new { background: #E8EDF6; color: var(--blue); }
+.tag.st-in_progress { background: #E6F0FA; color: #1F5F99; }
+.tag.st-ready_for_review { background: #F1ECDC; color: #7A6320; }
+.tag.st-done { background: #E5F2EA; color: #1E6B3A; }
+.tag.st-cancelled { background: #F7E6E5; color: var(--danger); }
+.return-note { font-size: 13px; background: #FBF6E6; border-right: 3px solid var(--gold); border-radius: 6px; padding: 6px 8px; margin-top: 4px; white-space: pre-wrap; }
+.files { margin-top: 8px; border-top: 1px dashed var(--line); padding-top: 6px; }
+.files summary { cursor: pointer; font-size: 13px; color: var(--blue); font-weight: 500; }
+.file-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.file { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; background: var(--paper); border-radius: 8px; padding: 8px; }
+.file-name { font-weight: 500; overflow-wrap: anywhere; }
+.file-meta { grid-column: 1; font-size: 12px; color: var(--slate); }
+.file .tag { grid-column: 2; grid-row: 1; justify-self: end; }
+.file-actions { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; }
+.upload { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.upload select { width: auto; padding: 6px 10px; font-size: 13px; }
+.upload-btn { position: relative; display: inline-flex; align-items: center; cursor: pointer; }
+.file-input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; padding: 0; }
+
 /* الموبايل: عمود واحد تقريبًا بعرض الشاشة، والتمرير الأفقي داخل صف الأعمدة وحده */
 @media (max-width: 640px) {
   .board { grid-template-columns: repeat(7, calc(100vw - 64px)); width: max-content; }
   .topbar { padding: 10px 14px; }
   .brand-page, .brand-sep { display: none; }
-  #board-view { padding: 14px 14px 32px; }
+  #board-view, #tasks-view { padding: 14px 14px 32px; }
+  .tabs { padding: 12px 14px 0; }
   .board-scroller { margin-inline: -14px; padding-inline: 14px; }
   .row { grid-template-columns: 1fr; }
 }
